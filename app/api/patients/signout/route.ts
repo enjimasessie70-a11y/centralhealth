@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { clearPatientData } from '@/utils/session-utils';
+import { createClient } from '@/lib/supabase/server';
 
 // Define all known patient data storage locations to ensure complete isolation
 const PATIENT_DATA_KEYS = [
@@ -44,8 +45,18 @@ export async function GET() {
   console.log('🔑 Patient signout requested');
   
   try {
+    // Sign out of Supabase Auth (clears sb-*-auth-token session cookies)
+    try {
+      const supabase = await createClient();
+      await supabase.auth.signOut();
+      console.log('Supabase session signed out');
+    } catch (signOutError) {
+      console.error('Error signing out of Supabase:', signOutError);
+    }
+
     // Get the current cookie to log which patient is signing out
-    const patientSessionCookie = cookies().get('patient_session');
+    const cookieStore = await cookies();
+    const patientSessionCookie = cookieStore.get('patient_session');
     if (patientSessionCookie?.value) {
       try {
         const session = JSON.parse(patientSessionCookie.value);
@@ -58,7 +69,7 @@ export async function GET() {
     // Delete all patient-related cookies by setting them to expire in the past
     // This ensures complete session isolation
     PATIENT_DATA_KEYS.forEach(key => {
-      cookies().set(key, '', {
+      cookieStore.set(key, '', {
         expires: new Date(0), // Set to epoch time (expired)
         path: '/',
         sameSite: 'lax',

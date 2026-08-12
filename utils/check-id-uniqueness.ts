@@ -5,7 +5,7 @@
  * and no duplicates or test IDs are used.
  */
 
-import { prisma } from '@/lib/database/prisma-client';
+import { admin } from '@/lib/supabase/admin';
 import { generateMedicalID, validateStoredMedicalID } from './medical-id';
 
 /**
@@ -22,10 +22,17 @@ export async function isUniqueMedicalID(id: string): Promise<boolean> {
     }
     
     // Check database for existing ID
-    const existingPatient = await prisma.patient.findFirst({
-      where: { mrn: id }
-    });
-    
+    const { data: existingPatient, error } = await admin
+      .from('Patient')
+      .select('id')
+      .eq('mrn', id)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error checking medical ID uniqueness:', error.message);
+      return false;
+    }
+
     return existingPatient === null;
   } catch (error) {
     console.error('Error checking medical ID uniqueness:', error);

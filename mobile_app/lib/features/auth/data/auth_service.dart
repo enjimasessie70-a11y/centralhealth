@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/api/api_constants.dart';
 import '../../../core/services/api_service.dart';
@@ -21,6 +22,8 @@ class AuthService {
 
   AuthService(this._apiClient, this._prefs);
 
+  SupabaseClient get _supabase => Supabase.instance.client;
+
   // This is now a patient-only app, always return 'patient' role
   Future<void> setSelectedRole(String role) async {
     // Always store 'patient' regardless of input
@@ -34,49 +37,43 @@ class AuthService {
 
   Future<AuthUser> login(LoginRequest request) async {
     try {
-      developer.log('AuthService: Attempting login with email: ${request.email}');
-      developer.log('AuthService: Using endpoint: ${ApiConstants.mobileLogin}');
-      developer.log('AuthService: Sending data: ${request.toJson()}');
-      
-      // API endpoint for authentication using mobile-specific endpoint
-      final response = await _apiClient.post(
-        ApiConstants.mobileLogin, // Use mobile-specific endpoint
-        data: request.toJson(), // Must use named parameter for ApiClient
-      );
-      
-      developer.log('AuthService: Received response: ${response.statusCode}');
-      developer.log('AuthService: Response data: ${response.data}');
+      developer.log('AuthService: Signing in via Supabase with email: ${request.email}');
 
-      // Ensure response.data is a Map<String, dynamic>
-      Map<String, dynamic> userData;
-      if (response.data is String) {
-        // Parse the JSON string into a map
-        userData = json.decode(response.data);
-      } else if (response.data is Map<String, dynamic>) {
-        // Already a map, use directly
-        userData = response.data;
-      } else {
-        throw FormatException('Unexpected response format: ${response.data.runtimeType}');
+      final response = await _supabase.auth.signInWithPassword(
+        email: request.email.trim().toLowerCase(),
+        password: request.password,
+      );
+
+      final session = response.session;
+      if (session == null) {
+        throw Exception('Login failed: no session returned');
       }
 
-      final user = AuthUser.fromJson(userData);
-      
+      final user = response.user!;
+      final userData = AuthUser(
+        id: user.id,
+        email: user.email ?? request.email,
+        name: user.userMetadata?['name'] as String?,
+        role: (user.userMetadata?['role'] as String?) ?? 'patient',
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+      );
+
       // Set token in API client for future requests
-      _apiClient.setAuthToken(user.accessToken);
-      ApiService().setAuthToken(user.accessToken);
-      
-      // Parse expiry from token if available and store in secure storage
-      final tokenExpiry = _getTokenExpiry(user.accessToken);
+      _apiClient.setAuthToken(userData.accessToken);
+      ApiService().setAuthToken(userData.accessToken);
+
+      final tokenExpiry = _getTokenExpiry(userData.accessToken);
       if (tokenExpiry != null) {
         await _secureStorage.storeTokenExpiry(tokenExpiry);
         _scheduleTokenRefresh(tokenExpiry);
       }
-      
+
       // Save user data in secure storage
-      await _saveAuthData(user);
-      
-      developer.log('AuthService: Login successful for user: ${user.email}');
-      return user;
+      await _saveAuthData(userData);
+
+      developer.log('AuthService: Login successful for user: ${userData.email}');
+      return userData;
     } catch (e) {
       developer.log('AuthService: Login failed: ${e.toString()}');
       throw _handleError(e);
@@ -122,36 +119,41 @@ class AuthService {
 
   Future<AuthUser> register(RegisterRequest request) async {
     try {
-      developer.log('AuthService: Registering new user with email: ${request.email}');
-      
-      final response = await _apiClient.post(
-        ApiConstants.mobileRegister, // Use mobile-specific endpoint
-        data: request.toJson(), // Must use named parameter for ApiClient
+      developer.log('AuthService: Registering new user via Supabase: ${request.email}');
+
+      final response = await _supabase.auth.signUp(
+        email: request.email.trim().toLowerCase(),
+        password: request.password,
+        data: {
+          'name': request.name,
+          'role': 'PATIENT',
+        },
       );
 
-      // Ensure response.data is a Map<String, dynamic>
-      Map<String, dynamic> userData;
-      if (response.data is String) {
-        // Parse the JSON string into a map
-        userData = json.decode(response.data);
-      } else if (response.data is Map<String, dynamic>) {
-        // Already a map, use directly
-        userData = response.data;
-      } else {
-        throw FormatException('Unexpected response format: ${response.data.runtimeType}');
+      final session = response.session;
+      final authUser = response.user;
+      if (authUser == null) {
+        throw Exception('Registration failed: no user returned');
       }
 
-      final user = AuthUser.fromJson(userData);
-      
+      final userData = AuthUser(
+        id: authUser.id,
+        email: authUser.email ?? request.email,
+        name: request.name,
+        role: 'patient',
+        accessToken: session?.accessToken ?? '',
+        refreshToken: session?.refreshToken ?? '',
+      );
+
       // Set token in API client for future requests
-      _apiClient.setAuthToken(user.accessToken);
-      ApiService().setAuthToken(user.accessToken);
-      
+      _apiClient.setAuthToken(userData.accessToken);
+      ApiService().setAuthToken(userData.accessToken);
+
       // Save user data
-      await _saveAuthData(user);
-      
-      developer.log('AuthService: Registration successful for user: ${user.email}');
-      return user;
+      await _saveAuthData(userData);
+
+      developer.log('AuthService: Registration successful for user: ${userData.email}');
+      return userData;
     } catch (e) {
       developer.log('AuthService: Registration failed: ${e.toString()}');
       throw _handleError(e);
@@ -160,9 +162,9 @@ class AuthService {
 
   Future<void> logout() async {
     try {
-      // Use the centralized logout endpoint
-      await _apiClient.post(ApiConstants.logout, data: {});
-      
+      // Sign out of Supabase Auth (invalidates the session server-side)
+      await _supabase.auth.signOut();
+
       // Remove token from all API clients
       _apiClient.removeAuthToken();
       ApiService().removeAuthToken();
@@ -203,6 +205,15 @@ class AuthService {
 
   // Load user data from secure storage
   Future<bool> isAuthenticated() async {
+    // Prefer the live Supabase session
+    try {
+      final session = _supabase.auth.currentSession;
+      if (session != null && session.accessToken.isNotEmpty) {
+        return true;
+      }
+    } catch (e) {
+      developer.log('AuthService: Supabase session check failed: ${e.toString()}');
+    }
     final token = await _secureStorage.getAccessToken();
     return token != null && token.isNotEmpty;
   }
@@ -260,14 +271,11 @@ class AuthService {
     return Exception(message);
   }
   
-  // Verify token with the Next.js backend
+  // Verify token with Supabase Auth
   Future<bool> verifyToken(String token) async {
     try {
-      final response = await _apiClient.post(
-        '/api/auth/verify-token',
-        data: {'token': token},
-      );
-      return response.statusCode == 200;
+      final user = await _supabase.auth.getUser(token);
+      return user.user != null;
     } catch (e) {
       developer.log('AuthService: Token verification failed: ${e.toString()}');
       return false;
@@ -318,61 +326,30 @@ class AuthService {
     _tokenRefreshTimer = Timer(timeToRefresh, _refreshToken);
   }
   
-  // Refresh the authentication token
+  // Refresh the authentication token via Supabase
   Future<void> _refreshToken() async {
     try {
-      // Get refresh token from secure storage
-      final refreshToken = await _secureStorage.getRefreshToken();
-      if (refreshToken == null) {
-        developer.log('AuthService: No refresh token available');
+      final refreshed = await _supabase.auth.refreshSession();
+      final newSession = refreshed.session;
+      if (newSession == null) {
+        developer.log('AuthService: Token refresh failed - no new session');
         return;
       }
-      
-      developer.log('AuthService: Refreshing token');
-      // Use standard token refresh endpoint instead of mobile-specific
-      final response = await _apiClient.post(
-        '/api/auth/refresh-token',
-        data: {'refreshToken': refreshToken}, // Must use named parameter for ApiClient
-      );
-      
-      // Properly parse the response data based on its type
-      Map<String, dynamic> responseData;
-      if (response.data is String) {
-        // Parse the JSON string into a map
-        responseData = json.decode(response.data);
-      } else if (response.data is Map<String, dynamic>) {
-        // Already a map, use directly
-        responseData = response.data;
-      } else {
-        throw FormatException('Unexpected token refresh response format: ${response.data.runtimeType}');
+
+      await _secureStorage.storeAccessToken(newSession.accessToken);
+      await _secureStorage.storeRefreshToken(newSession.refreshToken);
+
+      // Update API client
+      _apiClient.setAuthToken(newSession.accessToken);
+      ApiService().setAuthToken(newSession.accessToken);
+
+      final newExpiry = _getTokenExpiry(newSession.accessToken);
+      if (newExpiry != null) {
+        await _secureStorage.storeTokenExpiry(newExpiry);
+        _scheduleTokenRefresh(newExpiry);
       }
-      
-      // Check if the parsed data contains the expected fields
-      if (responseData.containsKey('accessToken')) {
-        final newAccessToken = responseData['accessToken'];
-        final newRefreshToken = responseData['refreshToken'];
-        
-        // Update tokens in storage
-        await _secureStorage.storeAccessToken(newAccessToken);
-        if (newRefreshToken != null) {
-          await _secureStorage.storeRefreshToken(newRefreshToken);
-        }
-        
-        // Update API client
-        _apiClient.setAuthToken(newAccessToken);
-        ApiService().setAuthToken(newAccessToken);
-        
-        // Schedule next refresh if token has expiry
-        final newExpiry = _getTokenExpiry(newAccessToken);
-        if (newExpiry != null) {
-          await _secureStorage.storeTokenExpiry(newExpiry);
-          _scheduleTokenRefresh(newExpiry);
-        }
-        
-        developer.log('AuthService: Token refresh successful');
-      } else {
-        developer.log('AuthService: Token refresh failed - invalid response');
-      }
+
+      developer.log('AuthService: Token refresh successful');
     } catch (e) {
       developer.log('AuthService: Error refreshing token: ${e.toString()}');
       // If refresh fails, user will need to login again

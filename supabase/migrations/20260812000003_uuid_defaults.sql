@@ -1,0 +1,42 @@
+-- Give every table a database-level UUID default for its TEXT id column
+-- PostgREST/Supabase inserts can then omit the id.
+
+ALTER TABLE "AntenatalRecord" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "Appointment" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "Hospital" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "MedicalRecord" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "NeonatalRecord" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "Patient" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "User" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "password_resets" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "security_audit_logs" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "profile_pictures" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "patient_emails" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "patient_phones" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "Department" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "DepartmentMembership" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "StaffProfile" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "PatientHospitalAccess" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "PatientSearchIndex" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "DoctorAvailability" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "PatientWidgetPreference" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "Referral" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "StatusHistory" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "Ambulance" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "AmbulanceDispatch" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "AmbulanceRequest" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "Wallet" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "WalletTransaction" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "Billing" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "Payment" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "Conversation" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "Message" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "BirthRecord" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "DeathRecord" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "MarketplaceVendor" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "MarketplaceProduct" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "MarketplaceOrder" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "OrderItem" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "CartItem" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "SavedVendor" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;
+ALTER TABLE "Prescription" ALTER COLUMN "id" SET DEFAULT (gen_random_uuid())::text;

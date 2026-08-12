@@ -14,7 +14,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "prisma:seed": "tsx prisma/seed.ts"
+    "prisma:seed": "tsx prisma/seed.ts",
+    "supabase:login": "supabase login",
+    "supabase:link": "supabase link --project-ref ftfiqabnvlztnoaiogms",
+    "supabase:status": "supabase status",
+    "db:push": "supabase db push",
+    "db:reset": "supabase db reset",
+    "db:seed": "node scripts/seed-supabase.js",
+    "test:supabase": "node scripts/test-supabase.js"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.9.1",
@@ -52,6 +59,8 @@
     "@radix-ui/react-toggle": "latest",
     "@radix-ui/react-toggle-group": "latest",
     "@radix-ui/react-tooltip": "latest",
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.112.3",
     "@tanstack/react-table": "latest",
     "@types/nodemailer": "^6.4.17",
     "@types/uuid": "^10.0.0",

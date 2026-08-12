@@ -1,142 +1,108 @@
-# Hospital FHIR Platform
+# CentralHealth — National Health System Platform
 
-This repository contains the Hospital FHIR platform, including:
-- FastAPI backend (PostgreSQL)
-- Flutter mobile app
-- Next.js web application
+Sierra Leone's national health platform. Web (Next.js), mobile (Flutter), backed by **Supabase** (PostgreSQL + Auth + Storage + Realtime) and deployed on **Vercel**.
 
-## Development Setup
+## Architecture
 
-The project is configured for seamless development across all components, ensuring they stay connected through consistent ports and configurations.
-
-### Prerequisites
-
-- Python 3.9+ with pip
-- Node.js 18+ with npm
-- Flutter SDK
-- PostgreSQL database
-- Xcode (for iOS development)
-
-### Database Setup
-
-The backend requires a PostgreSQL database. Make sure you have PostgreSQL running and configured:
-
-```bash
-# Create the database if it doesn't exist
-psql -U postgres -c "CREATE DATABASE hospital_fhir;"
-
-# Initialize the database schema
-cd backend
-psql -U postgres -d hospital_fhir -f setup_db.sql
+```
+┌─────────────────────┐   ┌──────────────────────┐
+│  Next.js web app    │   │  Flutter mobile app  │
+│  (Vercel)           │   │                      │
+└─────────┬───────────┘   └──────────┬───────────┘
+          │        Supabase          │
+          └──────────────────────────┘
+              ├── PostgreSQL (PostgREST + RLS)
+              ├── Auth (email/password, JWT sessions)
+              ├── Storage (profile images bucket: `profiles`)
+              └── Realtime (chat / messages)
 ```
 
-### Install Dependencies
+- **Supabase** is the backend: database, auth, storage, realtime, RLS.
+- The **Next.js app** talks to Supabase via `@supabase/ssr` (server + browser clients).
+- The **FastAPI backend** (`backend/`) is being deprecated; its endpoints are re-homed as Supabase-managed data + Next.js API routes.
+- **Prisma** is being removed; `supabase/migrations/*.sql` is the schema source of truth.
+
+## Prerequisites
+
+- Node.js 18+ / npm
+- Supabase CLI (`npm i -g supabase`)
+- Flutter SDK (mobile)
+
+## Setup
+
+### 1. Create `.env.local`
 
 ```bash
-# Install backend dependencies
-cd backend
-pip install fastapi uvicorn asyncpg bcrypt python-multipart python-jose pydantic
+cp .env.example .env.local
+```
 
-# Install mobile app dependencies
-cd ../mobile_app
-flutter pub get
+Fill in your Supabase project values (Dashboard → Project Settings → API).
 
-# Install web dependencies
-cd ..
+### 2. Link the Supabase project
+
+```bash
+supabase login
+npm run supabase:link   # links ftfiqabnvlztnoaiogms
+```
+
+### 3. Push the schema
+
+```bash
+npm run db:push
+```
+
+Migrations live in `supabase/migrations/`:
+1. `20260812000000_init.sql` — full schema generated from the Prisma models
+2. `20260812000001_auth_sync.sql` — `auth.users` → `public."User"` sync triggers + role handling
+3. `20260812000002_rls_storage.sql` — RLS policies + `profiles` storage bucket
+4. `20260812000003_uuid_defaults.sql` — DB-level UUID defaults for `id` columns
+5. `20260812000004_updatedat_defaults.sql` — `updatedAt` defaults
+6. `20260812000005_auth_delete_cascade.sql` — cascade cleanup on auth user deletion
+
+### 4. Verify the connection
+
+```bash
+npm run test:supabase
+```
+
+### 5. Run the web app
+
+```bash
 npm install
-```
-
-## Running the Application
-
-### Integrated Development Environment
-
-The easiest way to develop is using the integrated development script which launches both backend and mobile app:
-
-```bash
-npm run dev:all
-```
-
-This script:
-1. Starts the FastAPI backend on port 8001
-2. Launches the Flutter mobile app connected to the backend
-3. Provides color-coded logs from all components
-
-### Individual Components
-
-If you prefer to run components separately:
-
-```bash
-# Run only the backend
-npm run dev:backend
-
-# Run only the mobile app
-npm run dev:mobile  
-
-# Run only the web app
 npm run dev
 ```
 
-### Backend API Endpoints
+## Key Directories
 
-The backend serves:
-- Authentication: `/api/auth/mobile/login`
-- Patient profiles: `/api/patients/profile`
-- Hospital management: `/api/hospitals`
+| Path | Purpose |
+|------|---------|
+| `supabase/` | Schema migrations, config, storage |
+| `lib/supabase/` | Client helpers (browser, server, middleware, admin, session) |
+| `app/api/` | Next.js API routes (Supabase-backed) |
+| `prisma/` | Legacy Prisma schema (source of the SQL migration, being removed) |
+| `backend/` | Legacy FastAPI backend (being deprecated) |
+| `mobile_app/` | Flutter app |
 
-### Test Accounts
+## Auth Flow
 
-For testing, the following accounts are pre-configured:
+- Sign-up → `POST /api/patients/register` creates a Supabase auth user (trigger syncs `public."User"`) + linked `Patient` record with a permanent medical ID.
+- Sign-in → `POST /api/patients/login` signs in via Supabase; session cookies are set by `@supabase/ssr`.
+- Session checks → `lib/auth.ts` / `lib/supabase/session.ts` resolve the app user from the Supabase session.
+- Route protection → `middleware.ts` (`lib/supabase/middleware.ts`).
 
-1. **Patient Account**:
-   - Email: `patient@example.com`
-   - Password: `password123`
+## Deploying to Vercel
 
-2. **Admin Account**:
-   - Email: `admin@example.com`
-   - Password: `admin123`
+1. Push the repo to GitHub.
+2. Import into Vercel; set the three Supabase env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`).
+3. Build command `npm run build`, output `Next.js`.
+4. No serverless Postgres or FastAPI instance required — Supabase hosts everything.
 
-## Project Structure
+## Mobile App (Flutter)
 
-```
-hospital-fhir/
-├── backend/               # FastAPI backend server
-│   ├── main.py           # Main application file
-│   └── setup_db.sql      # Database schema setup
-├── mobile_app/           # Flutter mobile application
-│   └── lib/              # App source code
-├── public/               # Next.js public assets
-├── src/                  # Next.js application source
-├── dev-setup.js          # Development coordination script
-├── package.json          # Project configuration
-└── README.md             # This file
-```
+The Flutter app authenticates via Supabase Auth and reads data through the Supabase REST API.
+See `mobile_app/README.md` for the migration status and configuration.
 
 ## Troubleshooting
 
-### Mobile App Connection Issues
-
-If the mobile app cannot connect to the backend:
-
-1. Check that backend is running on port 8001
-2. Verify API constants in `mobile_app/lib/core/api/api_constants.dart`
-3. For iOS simulators, ensure the app is using `127.0.0.1:8001` as the base URL
-
-### Database Connection Issues
-
-If the backend cannot connect to PostgreSQL:
-
-1. Verify PostgreSQL is running: `pg_isready`
-2. Check connection parameters in `main.py` (host, port, username, password)
-3. Ensure the database exists: `psql -U postgres -l | grep hospital_fhir`
-
-### Port Conflicts
-
-If port 8001 is already in use:
-
-```bash
-# Find processes using port 8001
-lsof -i :8001
-
-# Kill the process
-kill -9 [PID]
-```
+- **`supabase db push` needs the DB password** — use the Supabase dashboard (SQL Editor) to apply `supabase/migrations/*.sql` directly, or run the CLI from a machine with the project password configured.
+- **RLS blocking reads** — `lib/supabase/admin.ts` uses the service-role key (bypasses RLS) for server-side admin operations; the browser/server clients use the anon key so RLS applies.

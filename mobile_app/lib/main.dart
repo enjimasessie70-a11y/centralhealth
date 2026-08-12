@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'features/auth/bloc/auth_bloc.dart';
 import 'features/auth/data/auth_service.dart';
 import 'features/auth/data/auth_debug.dart';
@@ -24,8 +25,16 @@ import 'core/constants/app_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:developer' as developer;
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Supabase (database + auth backend)
+  await Supabase.initialize(
+    url: AppConstants.supabaseUrl,
+    anonKey: AppConstants.supabaseAnonKey,
+  );
+  developer.log('Main: Supabase initialized');
+
   final prefs = await SharedPreferences.getInstance();
   
   // Get stored configuration
